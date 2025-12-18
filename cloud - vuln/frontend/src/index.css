@@ -1,0 +1,326 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* =============================================================================
+   BASE STYLES - Cyber-Security Dashboard Theme
+   ============================================================================= */
+
+@layer base {
+  /* Root variables for consistent theming */
+  :root {
+    --color-cyber-black: #0b1121;
+    --color-cyber-dark: #1e293b;
+    --color-neon-blue: #3b82f6;
+    --font-mono: 'JetBrains Mono', 'Fira Code', 'Monaco', 'Consolas', monospace;
+  }
+
+  /* Global body styles */
+  body {
+    @apply bg-cyber-black text-slate-300 antialiased;
+    font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  }
+
+  /* Smooth scrolling */
+  html {
+    scroll-behavior: smooth;
+  }
+
+  /* Custom scrollbar for cyber aesthetic */
+  ::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+
+  ::-webkit-scrollbar-track {
+    @apply bg-cyber-dark;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    @apply bg-cyber-gray rounded-full;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    @apply bg-slate-500;
+  }
+
+  /* Firefox scrollbar */
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: #334155 #1e293b;
+  }
+
+  /* Selection highlight */
+  ::selection {
+    @apply bg-neon-blue/30 text-white;
+  }
+
+  /* Focus styles for accessibility */
+  *:focus-visible {
+    @apply outline-none ring-2 ring-neon-blue ring-offset-2 ring-offset-cyber-black;
+  }
+}
+
+/* =============================================================================
+   COMPONENT STYLES - Reusable UI Components
+   ============================================================================= */
+
+@layer components {
+  /* Card component */
+  .card {
+    @apply bg-cyber-dark border border-cyber-gray rounded-lg p-4;
+  }
+
+  .card-hover {
+    @apply card transition-all duration-200 hover:border-neon-blue/50 hover:shadow-cyber;
+  }
+
+  /* HUD-style stat widget */
+  .stat-widget {
+    @apply bg-cyber-dark/80 backdrop-blur-sm border border-cyber-gray rounded-lg p-4;
+    @apply relative overflow-hidden;
+  }
+
+  .stat-widget::before {
+    content: '';
+    @apply absolute top-0 left-0 w-full h-0.5 bg-gradient-to-r from-transparent via-neon-blue to-transparent;
+    @apply opacity-50;
+  }
+
+  /* Status badges */
+  .badge {
+    @apply inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium;
+  }
+
+  .badge-critical {
+    @apply badge bg-severity-critical/20 text-severity-critical border border-severity-critical/30;
+  }
+
+  .badge-high {
+    @apply badge bg-severity-high/20 text-severity-high border border-severity-high/30;
+  }
+
+  .badge-medium {
+    @apply badge bg-severity-medium/20 text-severity-medium border border-severity-medium/30;
+  }
+
+  .badge-low {
+    @apply badge bg-severity-low/20 text-severity-low border border-severity-low/30;
+  }
+
+  .badge-scanning {
+    @apply badge bg-status-scanning/20 text-status-scanning border border-status-scanning/30;
+  }
+
+  .badge-pending {
+    @apply badge bg-status-pending/20 text-status-pending border border-status-pending/30;
+  }
+
+  .badge-completed {
+    @apply badge bg-status-completed/20 text-status-completed border border-status-completed/30;
+  }
+
+  .badge-failed {
+    @apply badge bg-status-failed/20 text-status-failed border border-status-failed/30;
+  }
+
+  /* Buttons */
+  .btn {
+    @apply inline-flex items-center justify-center px-4 py-2 text-sm font-medium rounded-md;
+    @apply transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-offset-2;
+    @apply focus:ring-offset-cyber-black disabled:opacity-50 disabled:cursor-not-allowed;
+  }
+
+  .btn-primary {
+    @apply btn bg-neon-blue text-white hover:bg-neon-blue/90 focus:ring-neon-blue;
+    @apply shadow-lg shadow-neon-blue/25;
+  }
+
+  .btn-danger {
+    @apply btn bg-severity-critical text-white hover:bg-severity-critical/90 focus:ring-severity-critical;
+    @apply shadow-lg shadow-severity-critical/25;
+  }
+
+  .btn-ghost {
+    @apply btn bg-transparent text-slate-300 hover:bg-cyber-gray hover:text-white;
+    @apply border border-cyber-gray;
+  }
+
+  .btn-icon {
+    @apply p-2 rounded-md text-slate-400 hover:text-white hover:bg-cyber-gray;
+    @apply transition-colors duration-200;
+  }
+
+  /* Input fields */
+  .input {
+    @apply w-full px-4 py-2 bg-cyber-black border border-cyber-gray rounded-md;
+    @apply text-slate-200 placeholder-slate-500;
+    @apply focus:outline-none focus:border-neon-blue focus:ring-1 focus:ring-neon-blue;
+    @apply transition-colors duration-200;
+  }
+
+  .input-mono {
+    @apply input font-mono text-sm;
+  }
+
+  /* Table styles */
+  .table-cyber {
+    @apply w-full text-sm;
+  }
+
+  .table-cyber thead {
+    @apply bg-cyber-dark/50 border-b border-cyber-gray;
+  }
+
+  .table-cyber th {
+    @apply px-4 py-3 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider;
+  }
+
+  .table-cyber tbody tr {
+    @apply border-b border-cyber-gray/50 hover:bg-cyber-dark/50 transition-colors;
+  }
+
+  .table-cyber td {
+    @apply px-4 py-3;
+  }
+
+  /* Risk score bar */
+  .risk-bar {
+    @apply h-2 rounded-full bg-cyber-gray overflow-hidden;
+  }
+
+  .risk-bar-fill {
+    @apply h-full rounded-full transition-all duration-500;
+  }
+
+  /* Pulse animation for scanning status */
+  .pulse-scanning {
+    @apply animate-pulse-fast;
+  }
+
+  /* Monospace text for technical data */
+  .mono {
+    @apply font-mono text-sm;
+  }
+
+  /* Gradient text */
+  .text-gradient {
+    @apply bg-gradient-to-r from-neon-blue to-neon-cyan bg-clip-text text-transparent;
+  }
+
+  /* Glow effects */
+  .glow-blue {
+    box-shadow: 0 0 20px rgba(59, 130, 246, 0.4);
+  }
+
+  .glow-red {
+    box-shadow: 0 0 20px rgba(239, 68, 68, 0.4);
+  }
+
+  .glow-green {
+    box-shadow: 0 0 20px rgba(16, 185, 129, 0.4);
+  }
+}
+
+/* =============================================================================
+   UTILITY STYLES - Additional Helpers
+   ============================================================================= */
+
+@layer utilities {
+  /* Hide scrollbar but keep functionality */
+  .scrollbar-hide {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+
+  .scrollbar-hide::-webkit-scrollbar {
+    display: none;
+  }
+
+  /* Text truncation */
+  .truncate-2 {
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+
+  /* Backdrop for modals */
+  .backdrop-cyber {
+    @apply bg-cyber-black/80 backdrop-blur-sm;
+  }
+
+  /* Grid scan line effect */
+  .scan-effect {
+    background: linear-gradient(
+      90deg,
+      transparent 0%,
+      rgba(59, 130, 246, 0.1) 50%,
+      transparent 100%
+    );
+    background-size: 200% 100%;
+    animation: scan-line 2s ease-in-out infinite;
+  }
+}
+
+/* =============================================================================
+   ANIMATIONS - Custom Keyframe Animations
+   ============================================================================= */
+
+/* Scanning line animation */
+@keyframes scan-line {
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
+}
+
+/* Subtle float animation for cards */
+@keyframes float {
+  0%, 100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-4px);
+  }
+}
+
+/* Number counting animation */
+@keyframes count-up {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Fade in animation */
+.animate-fade-in {
+  animation: fade-in 0.3s ease-out forwards;
+}
+
+/* Staggered animation delay utilities */
+.animation-delay-100 {
+  animation-delay: 100ms;
+}
+
+.animation-delay-200 {
+  animation-delay: 200ms;
+}
+
+.animation-delay-300 {
+  animation-delay: 300ms;
+}
+
+.animation-delay-400 {
+  animation-delay: 400ms;
+}
+
+.animation-delay-500 {
+  animation-delay: 500ms;
+}

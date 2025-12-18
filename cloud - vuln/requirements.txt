@@ -1,0 +1,38 @@
+# Container Vulnerability Scanner - Data Layer Dependencies
+# =========================================================
+# Python 3.11+ required
+
+# Core Framework
+fastapi>=0.109.0
+uvicorn[standard]>=0.27.0
+pydantic>=2.5.0
+pydantic-settings>=2.1.0
+
+# Database - Async PostgreSQL
+sqlalchemy[asyncio]>=2.0.25
+asyncpg>=0.29.0
+greenlet>=3.0.0
+
+# Migrations (optional - for Alembic)
+alembic>=1.13.0
+
+# Utilities
+python-dotenv>=1.0.0
+python-dateutil>=2.8.2
+
+# Type Checking
+mypy>=1.8.0
+types-python-dateutil>=2.8.19
+
+# Testing
+pytest>=8.0.0
+pytest-asyncio>=0.23.0
+pytest-cov>=4.1.0
+httpx>=0.26.0
+factory-boy>=3.3.0
+aiosqlite>=0.19.0  # SQLite async driver for tests
+
+# Development
+black>=24.1.0
+ruff>=0.1.14
+pre-commit>=3.6.0
