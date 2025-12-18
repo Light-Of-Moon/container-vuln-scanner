@@ -1,0 +1,141 @@
+---
+# ArgoCD Application for Container Vulnerability Scanner
+# GitOps deployment configuration
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: vulnscan
+  namespace: argocd
+  labels:
+    app.kubernetes.io/name: vulnscan
+    app.kubernetes.io/part-of: security-platform
+  annotations:
+    argocd.argoproj.io/manifest-generate-paths: .
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  
+  source:
+    # Replace with your Git repository URL
+    repoURL: https://github.com/your-org/container-vulnerability-scanner.git
+    targetRevision: HEAD
+    path: k8s
+    
+    # Optional: Use Kustomize for environment-specific overlays
+    # kustomize:
+    #   namePrefix: prod-
+    #   commonLabels:
+    #     environment: production
+  
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: vulnscan
+  
+  # Sync Policy
+  syncPolicy:
+    automated:
+      # Auto-sync when Git changes
+      prune: true
+      selfHeal: true
+      allowEmpty: false
+    syncOptions:
+      - Validate=true
+      - CreateNamespace=true
+      - PrunePropagationPolicy=foreground
+      - PruneLast=true
+      - ApplyOutOfSyncOnly=true
+      - ServerSideApply=true
+    retry:
+      limit: 5
+      backoff:
+        duration: 5s
+        factor: 2
+        maxDuration: 3m
+  
+  # Ignore differences for certain fields
+  ignoreDifferences:
+    - group: apps
+      kind: Deployment
+      jsonPointers:
+        - /spec/replicas
+    - group: autoscaling
+      kind: HorizontalPodAutoscaler
+      jsonPointers:
+        - /spec/minReplicas
+        - /spec/maxReplicas
+  
+  # Health checks
+  revisionHistoryLimit: 10
+
+---
+# ArgoCD AppProject for security applications
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: security-platform
+  namespace: argocd
+  labels:
+    app.kubernetes.io/part-of: security-platform
+spec:
+  description: Security platform applications including vulnerability scanner
+  
+  # Source repositories
+  sourceRepos:
+    - https://github.com/your-org/container-vulnerability-scanner.git
+    - https://github.com/your-org/security-platform.git
+  
+  # Destination clusters and namespaces
+  destinations:
+    - namespace: vulnscan
+      server: https://kubernetes.default.svc
+    - namespace: security
+      server: https://kubernetes.default.svc
+  
+  # Allowed cluster resources
+  clusterResourceWhitelist:
+    - group: ''
+      kind: Namespace
+    - group: 'rbac.authorization.k8s.io'
+      kind: ClusterRole
+    - group: 'rbac.authorization.k8s.io'
+      kind: ClusterRoleBinding
+  
+  # Allowed namespace resources
+  namespaceResourceWhitelist:
+    - group: ''
+      kind: '*'
+    - group: 'apps'
+      kind: '*'
+    - group: 'batch'
+      kind: '*'
+    - group: 'autoscaling'
+      kind: '*'
+    - group: 'policy'
+      kind: '*'
+    - group: 'networking.k8s.io'
+      kind: '*'
+  
+  # Deny certain resources
+  namespaceResourceBlacklist:
+    - group: ''
+      kind: ResourceQuota
+    - group: ''
+      kind: LimitRange
+  
+  # Role definitions for this project
+  roles:
+    - name: developer
+      description: Developer access to vulnerability scanner
+      policies:
+        - p, proj:security-platform:developer, applications, get, security-platform/*, allow
+        - p, proj:security-platform:developer, applications, sync, security-platform/*, allow
+      groups:
+        - security-dev-team
+    
+    - name: admin
+      description: Admin access to vulnerability scanner
+      policies:
+        - p, proj:security-platform:admin, applications, *, security-platform/*, allow
+      groups:
+        - security-admin-team

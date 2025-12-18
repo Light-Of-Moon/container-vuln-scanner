@@ -1,0 +1,80 @@
+# =============================================================================
+# .dockerignore - Exclude files from Docker build context
+# =============================================================================
+
+# Git
+.git
+.gitignore
+.gitattributes
+
+# Python
+__pycache__
+*.py[cod]
+*$py.class
+*.so
+.Python
+.venv
+venv/
+ENV/
+env/
+.eggs/
+*.egg-info/
+*.egg
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+.mypy_cache/
+.ruff_cache/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# Node.js (frontend)
+frontend/node_modules/
+frontend/.cache/
+frontend/dist/
+frontend/coverage/
+frontend/.env.local
+frontend/.env.development.local
+frontend/.env.test.local
+frontend/.env.production.local
+
+# Documentation
+docs/
+*.md
+!README.md
+
+# Docker
+Dockerfile*
+docker-compose*.yml
+.docker/
+
+# Kubernetes
+k8s/
+
+# Tests
+tests/
+test/
+*_test.py
+test_*.py
+
+# Misc
+.DS_Store
+Thumbs.db
+*.log
+*.tmp
+*.temp
+.env
+.env.*
+!.env.example
+
+# Local development
+*.local
+local/
+scripts/
+Makefile

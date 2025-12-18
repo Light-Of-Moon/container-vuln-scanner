@@ -1,0 +1,270 @@
+---
+# Trivy Scanner Worker Deployment
+# Background worker for processing vulnerability scans
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: worker-config
+  namespace: vulnscan
+  labels:
+    app: vulnscan-worker
+    component: worker
+data:
+  APP_NAME: "Container Vulnerability Scanner Worker"
+  ENVIRONMENT: "production"
+  DEBUG: "false"
+  LOG_LEVEL: "INFO"
+  LOG_FORMAT: "json"
+  
+  # Worker Settings
+  WORKER_CONCURRENCY: "1"
+  WORKER_POLL_INTERVAL_SECONDS: "5"
+  
+  # Trivy Settings
+  TRIVY_BINARY_PATH: "/usr/local/bin/trivy"
+  TRIVY_CACHE_DIR: "/root/.cache/trivy"
+  TRIVY_TIMEOUT_SECONDS: "300"
+  
+  # Database Pool (smaller for worker)
+  DB_POOL_SIZE: "5"
+  DB_MAX_OVERFLOW: "10"
+  DB_POOL_TIMEOUT: "30"
+  DB_POOL_RECYCLE: "1800"
+  
+  # Scan Settings
+  SCAN_CACHE_TTL_MINUTES: "60"
+  SCAN_TIMEOUT_SECONDS: "600"
+  SCAN_MAX_RETRIES: "3"
+  
+  # Risk Scoring
+  RISK_WEIGHT_CRITICAL: "100"
+  RISK_WEIGHT_HIGH: "50"
+  RISK_WEIGHT_MEDIUM: "10"
+  RISK_WEIGHT_LOW: "1"
+
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: worker-secrets
+  namespace: vulnscan
+  labels:
+    app: vulnscan-worker
+    component: worker
+type: Opaque
+stringData:
+  DATABASE_URL: "postgresql+asyncpg://scanner:scanner-secret-password-change-me@postgres-lb:5432/vulnscan"
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: vulnscan-worker
+  namespace: vulnscan
+  labels:
+    app: vulnscan-worker
+    component: worker
+spec:
+  replicas: 1
+  revisionHistoryLimit: 3
+  
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  
+  selector:
+    matchLabels:
+      app: vulnscan-worker
+  
+  template:
+    metadata:
+      labels:
+        app: vulnscan-worker
+        component: worker
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "9090"
+    spec:
+      terminationGracePeriodSeconds: 600  # Allow current scan to complete
+      
+      # Worker needs elevated permissions for container scanning
+      securityContext:
+        runAsUser: 0  # Trivy needs root for some image scanning operations
+        runAsGroup: 0
+        fsGroup: 0
+      
+      # Wait for postgres to be ready
+      initContainers:
+        - name: wait-for-postgres
+          image: busybox:1.36
+          command:
+            - /bin/sh
+            - -c
+            - |
+              until nc -z postgres-lb 5432; do
+                echo "Waiting for PostgreSQL..."
+                sleep 2
+              done
+              echo "PostgreSQL is ready!"
+        
+        # Pre-download Trivy vulnerability database
+        - name: trivy-db-download
+          image: aquasec/trivy:latest
+          command:
+            - /bin/sh
+            - -c
+            - |
+              echo "Downloading Trivy vulnerability database..."
+              trivy image --download-db-only --cache-dir /root/.cache/trivy
+              echo "Trivy database ready!"
+          volumeMounts:
+            - name: trivy-cache
+              mountPath: /root/.cache
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "256Mi"
+            limits:
+              cpu: "500m"
+              memory: "512Mi"
+      
+      containers:
+        - name: worker
+          image: vulnscan-worker:latest
+          imagePullPolicy: Always
+          
+          command:
+            - python
+            - -m
+            - app.worker
+          
+          envFrom:
+            - configMapRef:
+                name: worker-config
+            - secretRef:
+                name: worker-secrets
+          
+          resources:
+            requests:
+              cpu: "250m"
+              memory: "512Mi"
+            limits:
+              cpu: "1000m"
+              memory: "1Gi"
+          
+          # Liveness: Check if worker process is running
+          livenessProbe:
+            exec:
+              command:
+                - /bin/sh
+                - -c
+                - pgrep -f "python -m app.worker" || pgrep -f "worker.py"
+            initialDelaySeconds: 30
+            periodSeconds: 30
+            timeoutSeconds: 10
+            failureThreshold: 3
+          
+          # Readiness: Worker is ready when it can connect to DB
+          readinessProbe:
+            exec:
+              command:
+                - /bin/sh
+                - -c
+                - |
+                  python -c "
+                  import asyncio
+                  from app.database import health_check
+                  result = asyncio.run(health_check())
+                  exit(0 if result.get('status') == 'healthy' else 1)
+                  "
+            initialDelaySeconds: 10
+            periodSeconds: 30
+            timeoutSeconds: 10
+            failureThreshold: 3
+          
+          volumeMounts:
+            # Trivy cache - CRITICAL for performance
+            - name: trivy-cache
+              mountPath: /root/.cache
+            # Temporary directory for scan results
+            - name: tmp
+              mountPath: /tmp
+            # Docker socket for image scanning (if using Docker)
+            # - name: docker-socket
+            #   mountPath: /var/run/docker.sock
+      
+      volumes:
+        # EmptyDir for Trivy cache - persists across container restarts
+        - name: trivy-cache
+          emptyDir:
+            sizeLimit: 2Gi
+        
+        # Temporary storage for scan outputs
+        - name: tmp
+          emptyDir:
+            sizeLimit: 1Gi
+        
+        # Uncomment if using Docker for image pulling
+        # - name: docker-socket
+        #   hostPath:
+        #     path: /var/run/docker.sock
+        #     type: Socket
+      
+      # Don't restart too quickly on failure
+      restartPolicy: Always
+
+---
+# Service Account for Worker (if needed for container registry access)
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: vulnscan-worker
+  namespace: vulnscan
+  labels:
+    app: vulnscan-worker
+
+---
+# Optional: Scale workers based on pending scans
+# Requires KEDA or custom metrics
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: vulnscan-worker-hpa
+  namespace: vulnscan
+  labels:
+    app: vulnscan-worker
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: vulnscan-worker
+  minReplicas: 1
+  maxReplicas: 5
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 80
+    - type: Resource
+      resource:
+        name: memory
+        target:
+          type: Utilization
+          averageUtilization: 80
+  behavior:
+    scaleDown:
+      stabilizationWindowSeconds: 600  # Wait 10 min before scaling down
+      policies:
+        - type: Pods
+          value: 1
+          periodSeconds: 300
+    scaleUp:
+      stabilizationWindowSeconds: 60
+      policies:
+        - type: Pods
+          value: 2
+          periodSeconds: 60
