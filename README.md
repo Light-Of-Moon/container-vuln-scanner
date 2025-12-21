@@ -160,15 +160,6 @@ Full Swagger/OpenAPI documentation is available at:
 
 ---
 
-## 🤝 Contributors
-
-* **Mohamed Salah** - *Lead Developer & Architect*
-* **Ahmed Mohamed** - *Infrastructure Engineer*
-* **Ahmed Abdelmoniem** - *Frontend Developer*
-* **Ahmed Eldesouki** - *Backend Developer*
-
----
-
 ## 📄 License
 
 This project is licensed under the MIT License - see the [LICENSE](https://www.google.com/search?q=LICENSE) file for details.
