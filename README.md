@@ -16,7 +16,7 @@ The **Container Vulnerability Scanner** automates the security auditing of conta
 
 The system follows a strictly decoupled microservices pattern:
 
-```mermaid
+```
 graph LR
     User[User/Browser] --> Ingress[NGINX Ingress]
     Ingress --> Front[Frontend (React)]
