@@ -116,6 +116,10 @@ spec:
       kind: '*'
     - group: argoproj.io       # <--- ADDED THIS so it can sync Application objects
       kind: '*'
+    - group: ''
+      kind: ResourceQuota
+    - group: ''
+      kind: LimitRange
   
   # Role definitions for this project
   roles:
