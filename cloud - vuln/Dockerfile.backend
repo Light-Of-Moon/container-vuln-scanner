@@ -1,0 +1,105 @@
+# =============================================================================
+# Dockerfile.backend - FastAPI + Trivy Worker Image
+# =============================================================================
+# This image is used for both the API server and the background worker.
+# Trivy is installed for vulnerability scanning capabilities.
+#
+# Build: docker build -f Dockerfile.backend -t vulnscan-backend .
+# =============================================================================
+
+FROM python:3.11-slim AS base
+
+# Prevent Python from writing pyc files and buffering stdout/stderr
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PYTHONFAULTHANDLER=1 \
+    # pip configuration
+    PIP_NO_CACHE_DIR=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1 \
+    # Application directory
+    APP_HOME=/app
+
+WORKDIR ${APP_HOME}
+
+# =============================================================================
+# Stage 1: System Dependencies + Trivy Installation
+# =============================================================================
+
+FROM base AS dependencies
+
+# Install system dependencies required for:
+# - wget, gnupg, lsb-release: Adding Aqua Security repo
+# - curl: Health checks
+# - git: Some pip packages may need git
+# - libpq-dev, gcc: PostgreSQL driver compilation
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    wget \
+    gnupg \
+    lsb-release \
+    curl \
+    git \
+    libpq-dev \
+    gcc \
+    ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install Trivy from Aqua Security official repository
+# https://aquasecurity.github.io/trivy/latest/getting-started/installation/
+RUN wget -qO - https://aquasecurity.github.io/trivy-repo/deb/public.key | gpg --dearmor -o /usr/share/keyrings/trivy.gpg \
+    && echo "deb [signed-by=/usr/share/keyrings/trivy.gpg] https://aquasecurity.github.io/trivy-repo/deb generic main" | tee /etc/apt/sources.list.d/trivy.list \
+    && apt-get update \
+    && apt-get install -y --no-install-recommends trivy \
+    && rm -rf /var/lib/apt/lists/*
+
+# Pre-download Trivy vulnerability database (optional but recommended)
+# This speeds up first scan significantly
+RUN trivy image --download-db-only || true
+
+# =============================================================================
+# Stage 2: Python Dependencies
+# =============================================================================
+
+FROM dependencies AS python-deps
+
+# Copy requirements first for better layer caching
+COPY requirements.txt .
+
+# Install Python dependencies
+RUN pip install --no-cache-dir -r requirements.txt
+
+# =============================================================================
+# Stage 3: Final Image
+# =============================================================================
+
+FROM python-deps AS final
+
+# Create non-root user for security (optional - worker may need root for Docker socket)
+# RUN addgroup --system --gid 1001 appgroup \
+#     && adduser --system --uid 1001 --gid 1001 appuser
+
+# Copy application code
+COPY . .
+
+# Create directories for Trivy cache and temp files with proper permissions
+# This fixes the "mkdir /root/.cache: permission denied" error
+RUN mkdir -p /root/.cache/trivy /tmp/trivy_scans /app/trivy-cache \
+    && chmod -R 777 /root/.cache/trivy /tmp/trivy_scans /app/trivy-cache
+
+# Set environment defaults (can be overridden in docker-compose)
+ENV TRIVY_CACHE_DIR=/app/trivy-cache \
+    TRIVY_BINARY_PATH=/usr/bin/trivy \
+    TRIVY_TEMP_DIR=/tmp/trivy_scans \
+    ENVIRONMENT=development \
+    LOG_LEVEL=INFO
+
+# Expose API port
+EXPOSE 8000
+
+# Health check for API service
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+    CMD curl -f http://localhost:8000/health || exit 1
+
+# No strict entrypoint - allows flexible command override
+# API:    uvicorn app.main:app --host 0.0.0.0 --port 8000
+# Worker: python -m app.worker
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]

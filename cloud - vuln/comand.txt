@@ -1,0 +1,113 @@
+🌐 Access the Web Pages
+1. Frontend Dashboard (React UI)
+
+http://localhost:3000
+This is the main vulnerability scanner dashboard where you can:
+
+Upload/scan Docker images
+View scan results
+See vulnerability statistics
+Opened Simple Browser at http://localhost:3000
+
+2. Backend API (FastAPI)
+
+http://localhost:8000
+3. API Documentation (Swagger UI)
+
+http://localhost:8000/docs
+Interactive API documentation where you can test endpoints directly.
+
+Opened Simple Browser at http://localhost:8000/docs
+
+🔧 Kubernetes Access (if using K8s)
+For the Kubernetes deployment, use port-forwarding:
+
+
+# API (already forwarded to 8080)kubectl port-forward -n vulnscan svc/vulnscan-api 8080:80# Access at: http://localhost:8080# ArgoCD UIkubectl port-forward svc/argocd-server -n argocd 9090:443# Access at: https://localhost:9090# Login: admin / Xx0tZblpNib4CBK8
+📋 Quick Summary
+Service	URL	Description
+Frontend	http://localhost:3000	React Dashboard
+API	http://localhost:8000	FastAPI Backend
+API Docs	http://localhost:8000/docs	Swagger UI
+Health Check	http://localhost:8000/health	API Health
+K8s API	http://localhost:8080	(via port-forward)
+ArgoCD	https://localhost:9090	(via port-forward)
+
+--------------------------------------------------------------------------
+
+✅ Summary: All Phases Complete!
+Here's a quick reference of all the commands executed:
+
+📋 PHASE 1: Run Locally (Without Kubernetes)
+Step 1.1: Run PostgreSQL
+
+docker run -d \  --name vulnscan-db \  -e POSTGRES_USER=user \  -e POSTGRES_PASSWORD=password \  -e POSTGRES_DB=vulnscan \  -p 5432:5432 \  postgres:15-alpine
+Explanation: Starts PostgreSQL 15 with credentials matching docker-compose.yml
+
+Step 1.2: Apply Migration
+
+docker cp migrations/001_initial_schema.sql vulnscan-db:/tmp/docker exec vulnscan-db psql -U user -d vulnscan -f /tmp/001_initial_schema.sql
+Explanation: Creates tables, indexes, triggers, and views for vulnerability scan data
+
+Step 1.3: Create .env and Run Backend
+
+cat > .env << 'EOF'DATABASE_URL=postgresql+asyncpg://user:password@localhost:5432/vulnscanENVIRONMENT=development...EOFsource venv/bin/activateuvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+Explanation: Starts FastAPI on http://localhost:8000 with hot-reload
+
+Step 1.4: Run Worker
+
+source venv/bin/activatepython -m app.worker
+Explanation: Runs Trivy scanner worker as a Python module (respects package imports)
+
+Step 1.5: Run Frontend
+
+cd frontendnpm installnpm run dev
+Explanation: Starts Vite dev server on http://localhost:3000
+
+📋 PHASE 2: Build Docker Images
+
+# Build backend (API + Worker use same image)docker build -f Dockerfile.backend -t vulnscan-backend:latest .# Build frontenddocker build -f Dockerfile.frontend -t vulnscan-frontend:latest .# Tag for K8sdocker tag vulnscan-backend:latest vulnscan-api:latestdocker tag vulnscan-backend:latest vulnscan-worker:latest
+Note: Worker and API share the same image. Worker runs python -m app.worker, API runs uvicorn.
+
+📋 PHASE 3: Run on Kubernetes (KinD)
+Step 3.1: Create KinD Cluster
+
+cat <<EOF | kind create cluster --name vulnscan --config=-kind: ClusterapiVersion: kind.x-k8s.io/v1alpha4nodes:  - role: control-plane    extraPortMappings:      - containerPort: 30080        hostPort: 30080        protocol: TCPEOF
+Step 3.2: Load Images
+
+kind load docker-image vulnscan-api:latest --name vulnscankind load docker-image vulnscan-worker:latest --name vulnscankind load docker-image vulnscan-frontend:latest --name vulnscan
+Step 3.3-3.5: Deploy
+
+kubectl apply -f k8s/namespace.yamlkubectl apply -f k8s/postgres.yaml# Apply migrationkubectl cp migrations/001_initial_schema.sql vulnscan/postgres-0:/tmp/kubectl exec -n vulnscan postgres-0 -- psql -U scanner -d vulnscan -f /tmp/001_initial_schema.sqlkubectl apply -f k8s/api.yamlkubectl apply -f k8s/worker.yaml
+Verification
+
+kubectl get pods -n vulnscankubectl port-forward -n vulnscan svc/vulnscan-api 8080:80curl http://localhost:8080/health
+📋 PHASE 4: GitOps with ArgoCD
+Step 4.1: Install ArgoCD
+
+kubectl create namespace argocdkubectl apply -n argocd -f https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml
+Step 4.2: Get Admin Password
+
+kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath="{.data.password}" | base64 -d
+Admin credentials: admin / Xx0tZblpNib4CBK8
+
+Step 4.3: Apply ArgoCD App
+
+kubectl apply -f k8s/argocd-app.yaml
+Access ArgoCD UI
+
+kubectl port-forward svc/argocd-server -n argocd 9090:443# Open: https://localhost:9090
+How ArgoCD keeps the app synced:
+
+ArgoCD watches the Git repository specified in argocd-app.yaml
+When changes are pushed to the k8s/ directory, ArgoCD detects them
+With syncPolicy.automated.selfHeal: true, ArgoCD automatically applies changes
+prune: true removes resources deleted from Git
+Current Status:
+
+Component	Status
+PostgreSQL (K8s)	✅ Running
+API (K8s)	✅ 2/2 pods running
+Worker (K8s)	✅ Running
+ArgoCD	✅ Installed
+ArgoCD App	✅ Created (needs valid Git URL to sync)

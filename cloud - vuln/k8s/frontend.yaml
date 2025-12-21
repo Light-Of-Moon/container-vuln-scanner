@@ -1,0 +1,199 @@
+---
+# Frontend Deployment - React + Nginx
+# Vulnerability Scanner Frontend Service
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: frontend-config
+  namespace: vulnscan
+  labels:
+    app: vulnscan-frontend
+    component: frontend
+data:
+  # Nginx config to proxy API requests to the backend service
+  nginx.conf: |
+    server {
+        listen 80;
+        listen [::]:80;
+        server_name localhost;
+        
+        root /usr/share/nginx/html;
+        index index.html;
+        
+        # Gzip compression
+        gzip on;
+        gzip_vary on;
+        gzip_min_length 1024;
+        gzip_proxied expired no-cache no-store private auth;
+        gzip_types text/plain text/css text/xml text/javascript application/x-javascript application/xml application/javascript application/json;
+        
+        # Security headers
+        add_header X-Frame-Options "SAMEORIGIN" always;
+        add_header X-Content-Type-Options "nosniff" always;
+        add_header X-XSS-Protection "1; mode=block" always;
+        add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+        
+        # Cache static assets
+        location ~* \.(js|css|png|jpg|jpeg|gif|ico|svg|woff|woff2|ttf|eot)$ {
+            expires 1y;
+            add_header Cache-Control "public, immutable";
+        }
+        
+        # API proxy - forward /api requests to backend service
+        location /api/ {
+            proxy_pass http://vulnscan-api:80/api/;
+            proxy_http_version 1.1;
+            proxy_set_header Upgrade $http_upgrade;
+            proxy_set_header Connection 'upgrade';
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+            proxy_cache_bypass $http_upgrade;
+            proxy_read_timeout 300s;
+            proxy_connect_timeout 75s;
+        }
+        
+        # API proxy - forward /api/scan-details requests to backend service
+        location /api/scan-details/ {
+            proxy_pass http://vulnscan-api:80/api/scan-details/;
+            proxy_http_version 1.1;
+            proxy_set_header Host $host;
+        }
+        
+        # Health endpoint proxy
+        location /health {
+            proxy_pass http://vulnscan-api:80/health;
+            proxy_http_version 1.1;
+            proxy_set_header Host $host;
+        }
+        
+        # Docs endpoint proxy
+        location /docs {
+            proxy_pass http://vulnscan-api:80/docs;
+            proxy_http_version 1.1;
+            proxy_set_header Host $host;
+        }
+        
+        # OpenAPI spec proxy
+        location /openapi.json {
+            proxy_pass http://vulnscan-api:80/openapi.json;
+            proxy_http_version 1.1;
+            proxy_set_header Host $host;
+        }
+        
+        # SPA fallback - serve index.html for all routes
+        location / {
+            try_files $uri $uri/ /index.html;
+        }
+        
+        # Error pages
+        error_page 500 502 503 504 /50x.html;
+        location = /50x.html {
+            root /usr/share/nginx/html;
+        }
+    }
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: vulnscan-frontend
+  namespace: vulnscan
+  labels:
+    app: vulnscan-frontend
+    component: frontend
+spec:
+  type: ClusterIP
+  ports:
+    - name: http
+      port: 80
+      targetPort: 80
+      protocol: TCP
+  selector:
+    app: vulnscan-frontend
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: vulnscan-frontend
+  namespace: vulnscan
+  labels:
+    app: vulnscan-frontend
+    component: frontend
+spec:
+  replicas: 1
+  revisionHistoryLimit: 3
+  
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  
+  selector:
+    matchLabels:
+      app: vulnscan-frontend
+  
+  template:
+    metadata:
+      labels:
+        app: vulnscan-frontend
+        component: frontend
+    spec:
+      containers:
+        - name: frontend
+          image: vulnscan-frontend:latest
+          imagePullPolicy: IfNotPresent
+          
+          ports:
+            - name: http
+              containerPort: 80
+              protocol: TCP
+          
+          # Override nginx config with our custom config that knows about the K8s services
+          volumeMounts:
+            - name: nginx-config
+              mountPath: /etc/nginx/conf.d/default.conf
+              subPath: nginx.conf
+          
+          resources:
+            requests:
+              cpu: "50m"
+              memory: "64Mi"
+            limits:
+              cpu: "200m"
+              memory: "128Mi"
+          
+          livenessProbe:
+            httpGet:
+              path: /
+              port: 80
+            initialDelaySeconds: 10
+            periodSeconds: 30
+            timeoutSeconds: 5
+            failureThreshold: 3
+          
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 80
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 3
+          
+          securityContext:
+            readOnlyRootFilesystem: false
+            runAsNonRoot: false
+      
+      volumes:
+        - name: nginx-config
+          configMap:
+            name: frontend-config
+            items:
+              - key: nginx.conf
+                path: nginx.conf
+      
+      restartPolicy: Always
